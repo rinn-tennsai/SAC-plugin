@@ -68,6 +68,8 @@ public final class PlayerDataChannel implements PluginMessageListener {
             value.addProperty("level", entry.getValue() == null ? 0 : entry.getValue());
             Integer exp = data.proficiencyExp == null ? null : data.proficiencyExp.get(entry.getKey());
             value.addProperty("exp", exp == null ? 0 : exp);
+            Integer progress = data.usedDurability == null ? null : data.usedDurability.get(entry.getKey());
+            value.addProperty("progress", progress == null ? -1 : progress);
             skills.add(entry.getKey(), value);
         }
         root.add("skills", skills);

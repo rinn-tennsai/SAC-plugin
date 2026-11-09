@@ -24,12 +24,13 @@ import java.util.UUID;
 /** SAC Mod地図共有の招待、承認、近距離転送を仲介します。 */
 public final class MapShareChannel implements PluginMessageListener, Listener {
     public static final String CHANNEL = "sacmod:map_share";
-    private static final int MAX_MAP_BYTES = 8 * 1024 * 1024;
+    private static final int MAX_MAP_BYTES = 16 * 1024 * 1024;
     private static final int MAX_CHUNK_BYTES = 24_000;
     private static final double SHARE_RADIUS_SQUARED = 25.0;
     private static final long INVITE_LIFETIME_MS = 60_000L;
     private final SACplugin plugin;
     private final Set<UUID> moddedPlayers = new HashSet<>();
+    private final Set<UUID> markerAppliedThisSession = new HashSet<>();
     private final Map<UUID, Invitation> invitations = new HashMap<>();
     private final Map<UUID, Transfer> transfers = new HashMap<>();
     private final Map<UUID, MapPin> pins = new HashMap<>();
@@ -49,8 +50,11 @@ public final class MapShareChannel implements PluginMessageListener, Listener {
                 expireInvitations();
                 switch (in.readUnsignedByte()) {
                     case 0 -> {
-                        moddedPlayers.add(player.getUniqueId());
-                        updateModMarker(player);
+                        UUID playerId = player.getUniqueId();
+                        moddedPlayers.add(playerId);
+                        if (markerAppliedThisSession.add(playerId)) {
+                            updateModMarker(player);
+                        }
                     }
                     case 1 -> sendNearbyPlayers(player);
                     case 2 -> createInvitation(player, in);
@@ -296,6 +300,7 @@ public final class MapShareChannel implements PluginMessageListener, Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID id = event.getPlayer().getUniqueId();
         moddedPlayers.remove(id);
+        markerAppliedThisSession.remove(id);
         pins.remove(id);
         event.getPlayer().setPlayerListName(event.getPlayer().getName());
         invitations.entrySet().removeIf(entry -> entry.getValue().senderId.equals(id)
