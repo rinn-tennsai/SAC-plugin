@@ -56,7 +56,11 @@ public final class MapShareChannel implements PluginMessageListener, Listener {
                             updateModMarker(player);
                         }
                     }
-                    case 1 -> sendNearbyPlayers(player);
+                    case 1 -> {
+                        moddedPlayers.add(player.getUniqueId());
+                        if (markerAppliedThisSession.add(player.getUniqueId())) updateModMarker(player);
+                        sendNearbyPlayers(player);
+                    }
                     case 2 -> createInvitation(player, in);
                     case 3 -> decideInvitation(player, in);
                     case 4 -> startTransfer(player, in);
