@@ -30,7 +30,6 @@ public final class MapShareChannel implements PluginMessageListener, Listener {
     private static final long INVITE_LIFETIME_MS = 60_000L;
     private final SACplugin plugin;
     private final Set<UUID> moddedPlayers = new HashSet<>();
-    private final Set<UUID> markerAppliedThisSession = new HashSet<>();
     private final Map<UUID, Invitation> invitations = new HashMap<>();
     private final Map<UUID, Transfer> transfers = new HashMap<>();
     private final Map<UUID, MapPin> pins = new HashMap<>();
@@ -51,14 +50,12 @@ public final class MapShareChannel implements PluginMessageListener, Listener {
                 switch (in.readUnsignedByte()) {
                     case 0 -> {
                         UUID playerId = player.getUniqueId();
-                        moddedPlayers.add(playerId);
-                        if (markerAppliedThisSession.add(playerId)) {
-                            updateModMarker(player);
-                        }
+                        if (moddedPlayers.add(playerId)) sendModdedPlayers();
+                        else sendModdedPlayers(player);
                     }
                     case 1 -> {
-                        moddedPlayers.add(player.getUniqueId());
-                        if (markerAppliedThisSession.add(player.getUniqueId())) updateModMarker(player);
+                        if (moddedPlayers.add(player.getUniqueId())) sendModdedPlayers();
+                        else sendModdedPlayers(player);
                         sendNearbyPlayers(player);
                     }
                     case 2 -> createInvitation(player, in);
@@ -76,10 +73,25 @@ public final class MapShareChannel implements PluginMessageListener, Listener {
         }
     }
 
-    /** 汎用Modの利用者だけTABリストに印を付けます。 */
-    private void updateModMarker(Player player) {
-        if (!player.isOnline() || !moddedPlayers.contains(player.getUniqueId())) return;
-        player.setPlayerListName("§b◆ §r" + player.getName());
+    /** TAB用の利用者UUID一覧をmod利用者へ送ります。名前や称号の表示には触れません。 */
+    private void sendModdedPlayers() throws Exception {
+        byte[] packet = moddedPlayersPacket();
+        for (UUID id : Set.copyOf(moddedPlayers)) {
+            Player receiver = Bukkit.getPlayer(id);
+            if (receiver != null && receiver.isOnline()) send(receiver, packet);
+        }
+    }
+
+    private void sendModdedPlayers(Player receiver) throws Exception {
+        if (receiver.isOnline()) send(receiver, moddedPlayersPacket());
+    }
+
+    private byte[] moddedPlayersPacket() {
+        return frame(out -> {
+            out.writeByte(27);
+            out.writeInt(moddedPlayers.size());
+            for (UUID id : moddedPlayers) writeUuid(out, id);
+        });
     }
     private void updatePin(Player player, DataInputStream in) throws Exception {
         String dimension = in.readUTF();
@@ -304,9 +316,12 @@ public final class MapShareChannel implements PluginMessageListener, Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID id = event.getPlayer().getUniqueId();
         moddedPlayers.remove(id);
-        markerAppliedThisSession.remove(id);
         pins.remove(id);
-        event.getPlayer().setPlayerListName(event.getPlayer().getName());
+        try {
+            sendModdedPlayers();
+        } catch (Exception exception) {
+            plugin.getLogger().warning("TAB用のmod利用者一覧を更新できませんでした: " + exception.getMessage());
+        }
         invitations.entrySet().removeIf(entry -> entry.getValue().senderId.equals(id)
                 || entry.getValue().targetId.equals(id));
         transfers.entrySet().removeIf(entry -> entry.getValue().invitation.senderId.equals(id)
